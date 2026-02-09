@@ -1,47 +1,54 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import clientPromise from '../lib/mongodb';
-import { ObjectId } from 'mongodb';
+import pool from '../lib/db';
+import { randomUUID } from 'crypto';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const client = await clientPromise;
-    const db = client.db('eduswap');
-    const collection = db.collection('swaps');
-    const coursesCollection = db.collection('courses');
+    const client = await pool.connect();
 
     if (req.method === 'GET') {
-        // Aggregate to join course details
-        const swaps = await collection.aggregate([
-          {
-            $lookup: {
-              from: 'courses',
-              localField: 'haveCourseId',
-              foreignField: '_id',
-              as: 'haveCourse'
-            }
-          },
-          { $unwind: '$haveCourse' },
-          {
-            $lookup: {
-              from: 'courses',
-              localField: 'wantCourseId',
-              foreignField: '_id',
-              as: 'wantCourse'
-            }
-          },
-          { $unwind: '$wantCourse' },
-          { $sort: { createdAt: -1 } }
-        ]).toArray();
+        try {
+            // SQL Join to get course details
+            const query = `
+                SELECT 
+                    s.id, s.user_id as "userId", s.status, s.created_at as "createdAt", s.match_type as "matchType",
+                    hc.id as hc_id, hc.code as hc_code, hc.title as hc_title, hc.time_slot as hc_time_slot,
+                    wc.id as wc_id, wc.code as wc_code, wc.title as wc_title, wc.time_slot as wc_time_slot
+                FROM swap_requests s
+                JOIN courses hc ON s.have_course_id = hc.id
+                JOIN courses wc ON s.want_course_id = wc.id
+                ORDER BY s.created_at DESC
+            `;
+            
+            const result = await client.query(query);
 
-        // Transform _id to id for frontend compatibility
-        const sanitized = swaps.map((s: any) => ({
-          ...s,
-          id: s._id.toString(),
-          haveCourse: { ...s.haveCourse, id: s.haveCourse._id.toString() },
-          wantCourse: { ...s.wantCourse, id: s.wantCourse._id.toString() }
-        }));
+            // Transform flat SQL rows into nested objects for frontend
+            const sanitized = result.rows.map((row: any) => ({
+                id: row.id,
+                userId: row.userId,
+                status: row.status,
+                createdAt: row.createdAt,
+                matchType: row.matchType,
+                haveCourseId: row.hc_id,
+                wantCourseId: row.wc_id,
+                haveCourse: {
+                    id: row.hc_id,
+                    code: row.hc_code,
+                    title: row.hc_title,
+                    timeSlot: row.hc_time_slot
+                },
+                wantCourse: {
+                    id: row.wc_id,
+                    code: row.wc_code,
+                    title: row.wc_title,
+                    timeSlot: row.wc_time_slot
+                }
+            }));
 
-        return res.status(200).json(sanitized);
+            return res.status(200).json(sanitized);
+        } finally {
+            client.release();
+        }
     }
 
     if (req.method === 'POST') {
@@ -51,41 +58,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
              return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        // Helper to find or create a course
-        const getOrCreateCourseId = async (courseData: any) => {
-            const existing = await coursesCollection.findOne({ code: courseData.code });
-            if (existing) {
-                return existing._id;
-            }
-            const result = await coursesCollection.insertOne({
-                ...courseData,
-                // Ensure default fields
-                title: courseData.title || 'Unknown Title',
-                timeSlot: courseData.timeSlot || 'TBD' 
-            });
-            return result.insertedId;
-        };
+        try {
+            await client.query('BEGIN'); // Start Transaction
 
-        // 1. Get/Create Course IDs
-        const haveCourseId = await getOrCreateCourseId(have);
-        const wantCourseId = await getOrCreateCourseId(want);
+            // Helper to Find or Create Course
+            const ensureCourse = async (course: any) => {
+                // Check exist
+                const checkRes = await client.query('SELECT id FROM courses WHERE code = $1', [course.code]);
+                if (checkRes.rows.length > 0) {
+                    return checkRes.rows[0].id;
+                }
+                
+                // Create
+                const newId = randomUUID();
+                await client.query(
+                    'INSERT INTO courses (id, code, title, time_slot) VALUES ($1, $2, $3, $4)',
+                    [newId, course.code, course.title || 'Unknown', course.timeSlot || 'TBD']
+                );
+                return newId;
+            };
 
-        // 2. Create Swap
-        const newSwap = {
-          userId,
-          haveCourseId: new ObjectId(haveCourseId),
-          wantCourseId: new ObjectId(wantCourseId),
-          status: 'PENDING',
-          createdAt: new Date().toISOString(),
-          matchType: null
-        };
+            const haveCourseId = await ensureCourse(have);
+            const wantCourseId = await ensureCourse(want);
 
-        await collection.insertOne(newSwap);
+            const swapId = randomUUID();
+            await client.query(
+                `INSERT INTO swap_requests 
+                (id, user_id, have_course_id, want_course_id, status, created_at) 
+                VALUES ($1, $2, $3, $4, 'PENDING', NOW())`,
+                [swapId, userId, haveCourseId, wantCourseId]
+            );
 
-        return res.status(201).json({ message: 'Swap created successfully' });
+            await client.query('COMMIT'); // Commit Transaction
+            return res.status(201).json({ message: 'Swap created successfully', id: swapId });
+
+        } catch (e) {
+            await client.query('ROLLBACK');
+            throw e;
+        } finally {
+            client.release();
+        }
     }
 
-    // Handle unsupported methods
     return res.status(405).json({ error: 'Method not allowed' });
 
   } catch (e: any) {

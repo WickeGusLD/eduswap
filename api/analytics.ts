@@ -1,22 +1,33 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import clientPromise from '../lib/mongodb';
+import pool from '../lib/db';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const client = await clientPromise;
-    const db = client.db('eduswap');
-    const courses = await db.collection('courses').find({}).toArray();
-    const swaps = await db.collection('swaps').find({ status: { $ne: 'CANCELLED' } }).toArray();
+    // We want a list of courses with supply (have count) and demand (want count)
+    // We can do this with a single complex query or multiple simple ones.
+    // Let's do it efficiently with SQL.
+    
+    const query = `
+        SELECT 
+            c.code,
+            COUNT(CASE WHEN s.want_course_id = c.id AND s.status != 'CANCELLED' THEN 1 END) as demand,
+            COUNT(CASE WHEN s.have_course_id = c.id AND s.status != 'CANCELLED' THEN 1 END) as supply
+        FROM courses c
+        LEFT JOIN swap_requests s ON c.id = s.want_course_id OR c.id = s.have_course_id
+        GROUP BY c.id, c.code
+        HAVING 
+            COUNT(CASE WHEN s.want_course_id = c.id AND s.status != 'CANCELLED' THEN 1 END) > 0 
+            OR 
+            COUNT(CASE WHEN s.have_course_id = c.id AND s.status != 'CANCELLED' THEN 1 END) > 0
+    `;
 
-    const analytics = courses.map((course: any) => {
-        const demand = swaps.filter((s: any) => s.wantCourseId.toString() === course._id.toString()).length;
-        const supply = swaps.filter((s: any) => s.haveCourseId.toString() === course._id.toString()).length;
-        return {
-            courseCode: course.code,
-            demand,
-            supply
-        };
-    }).filter(a => a.demand > 0 || a.supply > 0);
+    const result = await pool.query(query);
+
+    const analytics = result.rows.map((row: any) => ({
+        courseCode: row.code,
+        demand: parseInt(row.demand),
+        supply: parseInt(row.supply)
+    }));
 
     return res.status(200).json(analytics);
   } catch (e: any) {

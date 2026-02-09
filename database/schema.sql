@@ -1,5 +1,6 @@
--- Courses table (Dynamic)
-CREATE TABLE courses (
+-- Run this in your Neon SQL Editor
+
+CREATE TABLE IF NOT EXISTS courses (
     id VARCHAR(50) PRIMARY KEY,
     code VARCHAR(20) NOT NULL,
     title VARCHAR(200),
@@ -8,9 +9,7 @@ CREATE TABLE courses (
     credits INT DEFAULT 3
 );
 
--- Swap Requests table
--- removed foreign key for user_id to support anonymous strings/sessions
-CREATE TABLE swap_requests (
+CREATE TABLE IF NOT EXISTS swap_requests (
     id VARCHAR(50) PRIMARY KEY,
     user_id VARCHAR(100) NOT NULL, 
     have_course_id VARCHAR(50) NOT NULL,

@@ -13,11 +13,17 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [allSwaps, setAllSwaps] = useState<SwapRequest[]>([]);
   
-  // Create Form States
+  // Create Form States - HAVE
   const [haveCode, setHaveCode] = useState('');
   const [haveTitle, setHaveTitle] = useState('');
-  const [haveTime, setHaveTime] = useState('');
+  const [haveDays, setHaveDays] = useState<string[]>([]);
+  const [haveTimeStr, setHaveTimeStr] = useState('');
+
+  // Create Form States - WANT
   const [wantCode, setWantCode] = useState('');
+  const [wantTitle, setWantTitle] = useState('');
+  const [wantDays, setWantDays] = useState<string[]>([]);
+  const [wantTimeStr, setWantTimeStr] = useState('');
   
   const [aiAdvice, setAiAdvice] = useState<string | null>(null);
   const [isLoadingAdvice, setIsLoadingAdvice] = useState(false);
@@ -40,17 +46,55 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
       );
   });
 
+  const daysOptions = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+  const toggleDay = (day: string, currentDays: string[], setDays: (d: string[]) => void) => {
+    if (currentDays.includes(day)) {
+        setDays(currentDays.filter(d => d !== day));
+    } else {
+        const order = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5 };
+        const newDays = [...currentDays, day].sort((a, b) => order[a as keyof typeof order] - order[b as keyof typeof order]);
+        setDays(newDays);
+    }
+  };
+
+  const formatTimeSlot = (days: string[], time: string) => {
+    if (days.length === 0 && !time) return '';
+    const dayStr = days.length > 0 ? days.join('/') : '';
+    
+    if (!time) return dayStr;
+
+    // Convert 24h to 12h
+    const [hours, minutes] = time.split(':');
+    const h = parseInt(hours, 10);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    const timeFormatted = `${h12}:${minutes} ${ampm}`;
+    
+    return dayStr ? `${dayStr} ${timeFormatted}` : timeFormatted;
+  };
+
   const handleCreate = async () => {
     if (haveCode && wantCode) {
+      const haveTimeSlot = formatTimeSlot(haveDays, haveTimeStr);
+      const wantTimeSlot = formatTimeSlot(wantDays, wantTimeStr);
+
       onCreateSwap(
-          { code: haveCode.toUpperCase(), title: haveTitle, timeSlot: haveTime },
-          { code: wantCode.toUpperCase(), title: 'Target Course' }
+          { code: haveCode.toUpperCase(), title: haveTitle, timeSlot: haveTimeSlot },
+          { code: wantCode.toUpperCase(), title: wantTitle, timeSlot: wantTimeSlot }
       );
+      
       // Reset form
       setHaveCode('');
       setHaveTitle('');
-      setHaveTime('');
+      setHaveDays([]);
+      setHaveTimeStr('');
+      
       setWantCode('');
+      setWantTitle('');
+      setWantDays([]);
+      setWantTimeStr('');
+      
       setAiAdvice(null);
       setActiveTab('browse');
       
@@ -70,6 +114,32 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
         setIsLoadingAdvice(false);
     }
   }
+
+  const renderTimeSelector = (days: string[], setDays: (d: string[]) => void, timeStr: string, setTimeStr: (t: string) => void) => (
+      <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+          <div className="flex flex-wrap gap-2">
+              {daysOptions.map(day => (
+                  <button
+                      key={day}
+                      onClick={() => toggleDay(day, days, setDays)}
+                      className={`text-xs font-medium px-2 py-1 rounded border transition-colors ${
+                          days.includes(day) 
+                              ? 'bg-indigo-600 text-white border-indigo-600' 
+                              : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300'
+                      }`}
+                  >
+                      {day}
+                  </button>
+              ))}
+          </div>
+          <input 
+              type="time" 
+              className="w-full text-sm rounded border-slate-200 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 p-2"
+              value={timeStr}
+              onChange={(e) => setTimeStr(e.target.value)}
+          />
+      </div>
+  );
 
   return (
     <div className="space-y-6 h-full flex flex-col">
@@ -109,7 +179,7 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
                         <span>What you are dropping</span>
                      </div>
                      <div>
-                         <label className="block text-sm font-medium text-slate-700 mb-1">Course Code <span className="text-red-500">*</span></label>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Course Code (CRN) <span className="text-red-500">*</span></label>
                          <input 
                             type="text" 
                             placeholder="e.g. CS101" 
@@ -130,13 +200,7 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
                      </div>
                      <div>
                          <label className="block text-sm font-medium text-slate-700 mb-1">Time Slot</label>
-                         <input 
-                            type="text" 
-                            placeholder="e.g. Mon/Wed 10am" 
-                            className="w-full rounded-lg border-slate-200 focus:ring-2 focus:ring-rose-100 focus:border-rose-400 p-2.5"
-                            value={haveTime}
-                            onChange={(e) => setHaveTime(e.target.value)}
-                         />
+                         {renderTimeSelector(haveDays, setHaveDays, haveTimeStr, setHaveTimeStr)}
                      </div>
                  </div>
 
@@ -147,7 +211,7 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
                         <span>What you want</span>
                      </div>
                      <div>
-                         <label className="block text-sm font-medium text-slate-700 mb-1">Target Course Code <span className="text-red-500">*</span></label>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Target Course Code (CRN) <span className="text-red-500">*</span></label>
                          <input 
                             type="text" 
                             placeholder="e.g. MATH200" 
@@ -156,6 +220,20 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
                             onChange={(e) => setWantCode(e.target.value)}
                             onBlur={getAdvice} 
                          />
+                     </div>
+                     <div>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Target Course Title</label>
+                         <input 
+                            type="text" 
+                            placeholder="e.g. Calculus II" 
+                            className="w-full rounded-lg border-slate-200 focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 p-2.5"
+                            value={wantTitle}
+                            onChange={(e) => setWantTitle(e.target.value)}
+                         />
+                     </div>
+                     <div>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Target Time Slot</label>
+                         {renderTimeSelector(wantDays, setWantDays, wantTimeStr, setWantTimeStr)}
                      </div>
                      
                      {/* AI Advice */}
@@ -239,6 +317,13 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
                                         <Tag className="w-4 h-4 mr-1.5" />
                                         {swap.wantCourse?.code}
                                     </div>
+                                    <p className="text-slate-500 text-xs mt-1 truncate">{swap.wantCourse?.title}</p>
+                                    {swap.wantCourse?.timeSlot && swap.wantCourse.timeSlot !== 'TBD' && (
+                                        <div className="flex items-center text-slate-400 text-xs mt-1">
+                                            <Clock className="w-3 h-3 mr-1" />
+                                            {swap.wantCourse.timeSlot}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <button 

@@ -1,33 +1,33 @@
 import { Pool, PoolConfig } from 'pg';
 
-// 1. Determine Connection String
-// Vercel + Neon often provides POSTGRES_URL.
-// We also support DATABASE_URL as a fallback.
+// We use the provided connection string as a default fallback.
+// This ensures the app connects immediately using your Neon credentials.
+const DEFAULT_CONNECTION_STRING = "postgresql://neondb_owner:npg_jgxJf6v5ObMh@ep-summer-snow-a14v4s2x-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require";
+
 const connectionString = 
   process.env.POSTGRES_URL || 
-  process.env.DATABASE_URL;
+  process.env.DATABASE_URL || 
+  DEFAULT_CONNECTION_STRING;
 
 if (!connectionString) {
-  console.error("CRITICAL ERROR: No database connection string found in environment variables (POSTGRES_URL or DATABASE_URL).");
+  console.error("CRITICAL ERROR: No database connection string found.");
 }
 
-// 2. Configure Pool
-// Note: In serverless functions, we want to be careful with pool size.
 const poolConfig: PoolConfig = {
   connectionString,
+  // Neon requires SSL. 'rejectUnauthorized: false' allows connection 
+  // without manually bundling the CA certificate, which is standard for this setup.
   ssl: {
-    rejectUnauthorized: false, // Required for Neon/Vercel to accept the self-signed-like certs often used in dev/cloud
+    rejectUnauthorized: false, 
   },
-  max: 5, // Reduce max connections for serverless to prevent exhaustion
-  connectionTimeoutMillis: 5000, // Fail fast if DB is unreachable
+  max: 5, // Limit pool size to prevent exhaustion in serverless functions
+  connectionTimeoutMillis: 5000, // Fail fast (5s) if DB is unreachable
   idleTimeoutMillis: 20000, // Close idle connections to free resources
 };
 
-// 3. Create Pool
 const pool = new Pool(poolConfig);
 
-// 4. Error Listener
-// This prevents the process from crashing on idle client errors
+// Handle idle client errors to prevent crash
 pool.on('error', (err) => {
   console.error('Unexpected error on idle database client', err);
 });

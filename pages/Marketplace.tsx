@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Course, SwapRequest } from '../types';
-import { Search, Plus, Filter, BookOpen, Clock, Tag } from 'lucide-react';
-import { getSwapAdvice } from '../services/geminiService';
+import { Search, Plus, Filter, Clock, Tag } from 'lucide-react';
 import { db } from '../services/db';
 
 interface MarketplaceProps {
@@ -24,9 +23,6 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
   const [wantTitle, setWantTitle] = useState('');
   const [wantDays, setWantDays] = useState<string[]>([]);
   const [wantTimeStr, setWantTimeStr] = useState('');
-  
-  const [aiAdvice, setAiAdvice] = useState<string | null>(null);
-  const [isLoadingAdvice, setIsLoadingAdvice] = useState(false);
 
   useEffect(() => {
     const loadSwaps = async () => {
@@ -95,7 +91,6 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
       setWantDays([]);
       setWantTimeStr('');
       
-      setAiAdvice(null);
       setActiveTab('browse');
       
       // Refresh list
@@ -105,15 +100,6 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
       }, 500);
     }
   };
-
-  const getAdvice = async () => {
-    if (haveCode && wantCode) {
-        setIsLoadingAdvice(true);
-        const advice = await getSwapAdvice(haveCode, wantCode);
-        setAiAdvice(advice);
-        setIsLoadingAdvice(false);
-    }
-  }
 
   const renderTimeSelector = (days: string[], setDays: (d: string[]) => void, timeStr: string, setTimeStr: (t: string) => void) => (
       <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
@@ -218,7 +204,6 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
                             className="w-full rounded-lg border-slate-200 focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 p-2.5"
                             value={wantCode}
                             onChange={(e) => setWantCode(e.target.value)}
-                            onBlur={getAdvice} 
                          />
                      </div>
                      <div>
@@ -235,23 +220,6 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onCreateSwap }) => {
                          <label className="block text-sm font-medium text-slate-700 mb-1">Target Time Slot</label>
                          {renderTimeSelector(wantDays, setWantDays, wantTimeStr, setWantTimeStr)}
                      </div>
-                     
-                     {/* AI Advice */}
-                     {(aiAdvice || isLoadingAdvice) && (
-                        <div className="mt-6 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
-                            <div className="flex items-start space-x-3">
-                                <BookOpen className="w-5 h-5 text-indigo-600 mt-0.5" />
-                                <div>
-                                    <p className="text-xs font-bold text-indigo-500 uppercase mb-1">AI Match Probability</p>
-                                    {isLoadingAdvice ? (
-                                        <p className="text-sm text-indigo-800 animate-pulse">Analyzing demand patterns...</p>
-                                    ) : (
-                                        <p className="text-sm text-indigo-900 leading-relaxed">{aiAdvice}</p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                     )}
 
                      <div className="pt-4">
                         <button 

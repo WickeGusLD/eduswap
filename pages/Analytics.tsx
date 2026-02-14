@@ -1,17 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Course, AnalyticsData } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
-import { generateAnalyticsInsights } from '../services/geminiService';
 import { db } from '../services/db';
-import { Sparkles, Loader2, Database } from 'lucide-react';
+import { Loader2, Database } from 'lucide-react';
 
 interface AnalyticsProps {
   courses: Course[];
 }
 
 const Analytics: React.FC<AnalyticsProps> = ({ courses }) => {
-  const [insights, setInsights] = useState<string>("");
-  const [loadingInsights, setLoadingInsights] = useState(false);
   const [demandData, setDemandData] = useState<AnalyticsData[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -41,14 +38,6 @@ const Analytics: React.FC<AnalyticsProps> = ({ courses }) => {
   ];
   const COLORS = ['#10b981', '#6366f1', '#cbd5e1'];
 
-  const handleGenerateInsights = async () => {
-    if (demandData.length === 0) return;
-    setLoadingInsights(true);
-    const text = await generateAnalyticsInsights(demandData);
-    setInsights(text);
-    setLoadingInsights(false);
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start">
@@ -56,27 +45,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ courses }) => {
             <h1 className="text-3xl font-bold text-slate-800">Analytics Dashboard</h1>
             <p className="text-slate-500 mt-1">Real-time insights into course demand and swap efficiency.</p>
          </div>
-         <button 
-            onClick={handleGenerateInsights}
-            disabled={loadingInsights || loadingData}
-            className="flex items-center space-x-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-5 py-2.5 rounded-lg font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-70"
-         >
-            {loadingInsights ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-            <span>Generate AI Report</span>
-         </button>
       </div>
-
-      {insights && (
-        <div className="bg-gradient-to-br from-violet-50 to-indigo-50 border border-indigo-100 p-6 rounded-2xl animate-fade-in">
-            <h3 className="text-indigo-900 font-bold mb-3 flex items-center">
-                <Sparkles className="w-5 h-5 mr-2 text-indigo-600" />
-                AI-Generated Market Insights
-            </h3>
-            <div className="prose prose-indigo max-w-none text-indigo-800 text-sm leading-relaxed whitespace-pre-line">
-                {insights}
-            </div>
-        </div>
-      )}
 
       {loadingData ? (
           <div className="h-80 flex flex-col items-center justify-center bg-white rounded-2xl border border-slate-100">

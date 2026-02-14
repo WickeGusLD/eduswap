@@ -9,7 +9,6 @@
     "eject": "react-scripts eject"
   },
   "dependencies": {
-    "@google/genai": "^0.1.1",
     "@vercel/node": "^3.0.0",
     "lucide-react": "^0.294.0",
     "pg": "^8.11.3",
